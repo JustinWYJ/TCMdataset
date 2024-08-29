@@ -13,11 +13,6 @@ from sklearn.preprocessing import normalize
 
 
 def get_edge_index(data,adj_noeye):
-    """
-    使用官网提供的图神经网络时使用
-    :param data:
-    :return:
-    """
     coo = []
     for d in data:
         temp_coo = []
@@ -84,59 +79,56 @@ def sparse_mx_to_torch_sparse_tensor(sparse_mx):
 
 def cluster_eva(epoch, y_true, y_pred):
     """
-    各种评价指标，准确率，f1等
     :param y_true:
     :param y_pred:
-    :return: pred_labels: 预测标签， acc: 准确率, f1: F1分数, ari: 调整兰德指数, nmi: 归一互信息化
+    :return: pred_labels, acc, f1, ari, nmi
     """
     y_pred_copy = y_pred.copy()
-    y_true = y_true - np.min(y_true)  # 将 y_true 中所有标签值减去最小值，确保它们从 0 开始连续编号。
+    y_true = y_true - np.min(y_true)  
 
-    l1 = list(set(y_true))  # 获取 y_true 中出现过的不同标签值，并将其转换为列表形式。
-    numclass1 = len(l1)  # 计算 y_true 中不同标签值的数量，即真实类别数。
+    l1 = list(set(y_true)) 
+    numclass1 = len(l1)
 
     l2 = list(set(y_pred_copy))
     numclass2 = len(l2)
 
     ind = 0
-    if numclass1 != numclass2:  # 如果真实类别数和预测类别数不相等
-        for i in l1:  # 遍历 l1 中的每个标签值 i
-            if i in l2:  # 如果标签值 i 在 l2 中出现过，则不做任何操作
+    if numclass1 != numclass2: 
+        for i in l1:  
+            if i in l2:  
                 pass
-            else:  # 否则，在 y_pred 的第 ind 个位置添加标签值 i，并将 ind 加 1。
+            else:  
                 y_pred_copy[ind] = i
                 ind += 1
 
-    l2 = list(set(y_pred_copy))  # 重新获取更新后的 y_pred 中出现过的不同标签值。
+    l2 = list(set(y_pred_copy)) 
     numclass2 = len(l2)
 
-    if numclass1 != numclass2:  # 再次检查真实类别数和预测类别数是否相等。如果不相等，则输出错误信息并返回。
+    if numclass1 != numclass2: 
         print('error')
         return
 
-    cost = np.zeros((numclass1, numclass2), dtype=int)  # 创建一个 numclass1 行 numclass2 列的二维数组 cost，并将其初始化为零
-    # 接下来，函数创建一个二维数组 cost，其中每行对应于 y_true 中的一个标签值，每列对应于 y_pred 中的一个标签值。
-    # cost[i][j] 表示 y_true 中属于第 i 类的样本中有多少个被预测为属于第 j 类。
-    for i, c1 in enumerate(l1):  # 遍历 l1 中的每个标签值 c1，并获取属于第 c1 类的真实样本集合 mps
-        mps = [i1 for i1, e1 in enumerate(y_true) if e1 == c1]  # 通过列表推导式，得到所有真实标签为 c1 的样本在 y_true 中的索引列表 mps
-        for j, c2 in enumerate(l2):  # 遍历 l2 中的每个标签值 c2。#
-            mps_d = [i1 for i1 in mps if y_pred_copy[i1] == c2]  # 通过列表推导式，得到在 mps 中与 y_pred 中标签为 c2 的样本对应的索引列表 mps_d
-            cost[i][j] = len(mps_d)  # 将 mps_d 中元素的数量赋给 cost[i][j]，即真实标签为 c1 且预测标签为 c2 的样本数量
+    cost = np.zeros((numclass1, numclass2), dtype=int) 
+    for i, c1 in enumerate(l1):  
+        mps = [i1 for i1, e1 in enumerate(y_true) if e1 == c1]  
+        for j, c2 in enumerate(l2):  
+            mps_d = [i1 for i1 in mps if y_pred_copy[i1] == c2]  
+            cost[i][j] = len(mps_d)  
 
     # match two clustering results by Munkres algorithm
-    m = Munkres()  # 创建一个 Munkres 对象 m
-    cost = cost.__neg__().tolist()  # 将 cost 中所有元素取相反数，以便使用 Munkres 算法最小化矩阵总和。然后，将其转换为列表形式
-    indexes = m.compute(cost)  # 使用 Munkres 算法计算 cost 的最优匹配，并返回一个包含匹配结果的二元组列表 indexes
+    m = Munkres() 
+    cost = cost.__neg__().tolist() 
+    indexes = m.compute(cost)  
 
     # get the match results
-    new_predict = np.zeros(len(y_pred_copy))  # 创建一个长度为 y_pred 的全零数组 new_predict，用于存储新的预测标签
-    for i, c in enumerate(l1):  # 遍历 l1 中的每个标签值 c
+    new_predict = np.zeros(len(y_pred_copy))  
+    for i, c in enumerate(l1):  
         # correponding label in l2:
-        c2 = l2[indexes[i][1]]  # 获取在 l2 中与 c 对应的标签值 c2
+        c2 = l2[indexes[i][1]] 
 
         # ai is the index with label==c2 in the pred_label list
-        ai = [ind for ind, elm in enumerate(y_pred_copy) if elm == c2]  # 通过列表推导式，得到所有预测标签为 c2 的样本在 y_pred 中的索引列表 ai
-        new_predict[ai] = c  # 将 new_predict 中索引为 ai 的元素赋值为 c，即将预测标签为 c2 的样本都重新赋值为真实标签 c
+        ai = [ind for ind, elm in enumerate(y_pred_copy) if elm == c2]  
+        new_predict[ai] = c 
 
     acc = metrics.accuracy_score(y_true, new_predict)
     f1_macro = metrics.f1_score(y_true, new_predict, average='macro')
@@ -145,9 +137,9 @@ def cluster_eva(epoch, y_true, y_pred):
     f1_micro = metrics.f1_score(y_true, new_predict, average='micro')
     precision_micro = metrics.precision_score(y_true, new_predict, average='micro')
     recall_micro = metrics.recall_score(y_true, new_predict, average='micro')
-    # Adjusted Rand index (ARI)调整兰德指数，值域是[-1,1]，负数代表结果不好，越接近于1越好
+    # Adjusted Rand index (ARI)
     ari = metrics.adjusted_rand_score(y_true, new_predict)
-    # Normalized Mutual Information (NMI)归一化互信息，值域是[0,1]，值越高表示两个聚类结果越相似
+    # Normalized Mutual Information (NMI)
     nmi = metrics.normalized_mutual_info_score(y_true, new_predict)
     print(epoch, ':acc {:.4f}'.format(acc), ', nmi {:.4f}'.format(nmi), ', ari {:.4f}'.format(ari),
           ', f1 {:.4f}'.format(f1_macro))
@@ -156,60 +148,57 @@ def cluster_eva(epoch, y_true, y_pred):
 
 def align_label(y_true, y_pred):
     y_pred_copy = y_pred.copy()
-    y_true = y_true - np.min(y_true)  # 将 y_true 中所有标签值减去最小值，确保它们从 0 开始连续编号。
+    y_true = y_true - np.min(y_true) 
 
-    l1 = list(set(y_true))  # 获取 y_true 中出现过的不同标签值，并将其转换为列表形式。
-    numclass1 = len(l1)  # 计算 y_true 中不同标签值的数量，即真实类别数。
+    l1 = list(set(y_true))
+    numclass1 = len(l1) 
 
     l2 = list(set(y_pred_copy))
     numclass2 = len(l2)
 
     ind = 0
-    if numclass1 != numclass2:  # 如果真实类别数和预测类别数不相等
-        for i in l1:  # 遍历 l1 中的每个标签值 i
-            if i in l2:  # 如果标签值 i 在 l2 中出现过，则不做任何操作
+    if numclass1 != numclass2: 
+        for i in l1:  
+            if i in l2: 
                 pass
-            else:  # 否则，在 y_pred 的第 ind 个位置添加标签值 i，并将 ind 加 1。
+            else:  
                 y_pred_copy[ind] = i
                 ind += 1
 
-    l2 = list(set(y_pred_copy))  # 重新获取更新后的 y_pred 中出现过的不同标签值。
+    l2 = list(set(y_pred_copy)) 
     numclass2 = len(l2)
 
-    if numclass1 != numclass2:  # 再次检查真实类别数和预测类别数是否相等。如果不相等，则输出错误信息并返回。
+    if numclass1 != numclass2: 
         print('error')
         return
 
-    cost = np.zeros((numclass1, numclass2), dtype=int)  # 创建一个 numclass1 行 numclass2 列的二维数组 cost，并将其初始化为零
-    # 接下来，函数创建一个二维数组 cost，其中每行对应于 y_true 中的一个标签值，每列对应于 y_pred 中的一个标签值。
-    # cost[i][j] 表示 y_true 中属于第 i 类的样本中有多少个被预测为属于第 j 类。
-    for i, c1 in enumerate(l1):  # 遍历 l1 中的每个标签值 c1，并获取属于第 c1 类的真实样本集合 mps
-        mps = [i1 for i1, e1 in enumerate(y_true) if e1 == c1]  # 通过列表推导式，得到所有真实标签为 c1 的样本在 y_true 中的索引列表 mps
-        for j, c2 in enumerate(l2):  # 遍历 l2 中的每个标签值 c2。#
-            mps_d = [i1 for i1 in mps if y_pred_copy[i1] == c2]  # 通过列表推导式，得到在 mps 中与 y_pred 中标签为 c2 的样本对应的索引列表 mps_d
-            cost[i][j] = len(mps_d)  # 将 mps_d 中元素的数量赋给 cost[i][j]，即真实标签为 c1 且预测标签为 c2 的样本数量
+    cost = np.zeros((numclass1, numclass2), dtype=int)  
+
+    for i, c1 in enumerate(l1):  
+        mps = [i1 for i1, e1 in enumerate(y_true) if e1 == c1] 
+        for j, c2 in enumerate(l2):  
+            mps_d = [i1 for i1 in mps if y_pred_copy[i1] == c2]  
+            cost[i][j] = len(mps_d)  
 
     # match two clustering results by Munkres algorithm
-    m = Munkres()  # 创建一个 Munkres 对象 m
-    cost = cost.__neg__().tolist()  # 将 cost 中所有元素取相反数，以便使用 Munkres 算法最小化矩阵总和。然后，将其转换为列表形式
-    indexes = m.compute(cost)  # 使用 Munkres 算法计算 cost 的最优匹配，并返回一个包含匹配结果的二元组列表 indexes
+    m = Munkres()  
+    cost = cost.__neg__().tolist()  
+    indexes = m.compute(cost)  
 
     # get the match results
-    new_predict = np.zeros(len(y_pred_copy))  # 创建一个长度为 y_pred 的全零数组 new_predict，用于存储新的预测标签
-    for i, c in enumerate(l1):  # 遍历 l1 中的每个标签值 c
+    new_predict = np.zeros(len(y_pred_copy))  
+    for i, c in enumerate(l1):  
         # correponding label in l2:
-        c2 = l2[indexes[i][1]]  # 获取在 l2 中与 c 对应的标签值 c2
+        c2 = l2[indexes[i][1]]  
 
         # ai is the index with label==c2 in the pred_label list
-        ai = [ind for ind, elm in enumerate(y_pred_copy) if elm == c2]  # 通过列表推导式，得到所有预测标签为 c2 的样本在 y_pred 中的索引列表 ai
-        new_predict[ai] = c  # 将 new_predict 中索引为 ai 的元素赋值为 c，即将预测标签为 c2 的样本都重新赋值为真实标签 c
+        ai = [ind for ind, elm in enumerate(y_pred_copy) if elm == c2]  
+        new_predict[ai] = c  
     return new_predict
 
 class dataset(Dataset):
     def __init__(self, args):
         """
-        这里的c_data和c_label均为对于的编号
-        sym_in_syn包含了每个病所具有的全部症状，格式为症状的编号
         :param args:
         """
         self.one_hot = np.load(args.one_hot)
@@ -353,7 +342,6 @@ class node_classify_dataset(Dataset):
 
     def get_edge_index(self, data):
         """
-        使用官网提供的图神经网络时使用
         :param data:
         :return:
         """
